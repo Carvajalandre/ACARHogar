@@ -15,11 +15,9 @@ export function ThemeLoader() {
     const loadTheme = async () => {
       if (user) {
         try {
-          const userPrefDoc = await getDoc(
-            doc(db, "users", user.uid, "preferences", "ui")
-          );
-          if (userPrefDoc.exists() && userPrefDoc.data().theme) {
-            applyTheme(userPrefDoc.data().theme as ThemeName);
+          const userDoc = await getDoc(doc(db, "users", user.uid));
+          if (userDoc.exists() && userDoc.data().theme) {
+            applyTheme(userDoc.data().theme as ThemeName);
             return;
           }
         } catch (error) {
