@@ -19,9 +19,17 @@ export default function SettingsPage() {
     if (stored && themeMeta[stored]) {
       setCurrentTheme(stored);
     }
+
+    const handleThemeChange = (e: any) => {
+      if (e.detail && themeMeta[e.detail as ThemeName]) {
+        setCurrentTheme(e.detail);
+      }
+    };
+    window.addEventListener("theme-changed", handleThemeChange);
+    return () => window.removeEventListener("theme-changed", handleThemeChange);
   }, []);
 
-  const handleThemeChange = async (themeName: ThemeName) => {
+  const handleThemeChangeClick = async (themeName: ThemeName) => {
     applyTheme(themeName);
     setCurrentTheme(themeName);
 
@@ -29,12 +37,12 @@ export default function SettingsPage() {
     if (user) {
       try {
         await setDoc(
-          doc(db, "users", user.uid, "preferences", "ui"),
+          doc(db, "users", user.uid),
           { theme: themeName },
           { merge: true }
         );
-      } catch {
-        // Silently fail — theme is already saved to localStorage by applyTheme
+      } catch (e) {
+        console.error("Error saving theme", e);
       }
     }
   };
@@ -70,7 +78,7 @@ export default function SettingsPage() {
               return (
                 <button
                   key={name}
-                  onClick={() => handleThemeChange(name)}
+                  onClick={() => handleThemeChangeClick(name)}
                   className={`
                     relative flex flex-col items-center gap-2 rounded-xl border-2 p-4
                     transition-all duration-200

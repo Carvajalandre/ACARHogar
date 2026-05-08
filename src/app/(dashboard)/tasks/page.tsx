@@ -200,11 +200,13 @@ export default function TasksPage() {
         </div>
 
         <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-          <DialogTrigger asChild>
-            <Button className="gap-2 shrink-0">
-              <Plus className="h-4 w-4" /> Nueva Tarea
-            </Button>
-          </DialogTrigger>
+          <DialogTrigger 
+            render={
+              <Button className="gap-2 shrink-0">
+                <Plus className="h-4 w-4" /> Nueva Tarea
+              </Button>
+            }
+          />
           <DialogContent className="sm:max-w-[425px]">
             <DialogHeader>
               <DialogTitle>Crear Nueva Tarea</DialogTitle>

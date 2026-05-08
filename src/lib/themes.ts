@@ -196,4 +196,7 @@ export function applyTheme(themeName: ThemeName) {
     root.style.setProperty(`--${key}`, value);
   });
   localStorage.setItem("theme", themeName);
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new CustomEvent("theme-changed", { detail: themeName }));
+  }
 }
