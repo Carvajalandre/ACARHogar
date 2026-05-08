@@ -8,7 +8,7 @@ import { useAuth } from "@/lib/firebase/auth-context";
  * Returns { user, loading, username } for convenience.
  */
 export function useRequireAuth() {
-  const { user, loading, username, logout } = useAuth();
+  const { user, loading, username, householdId, logout, refreshUser } = useAuth();
   const router = useRouter();
 
   useEffect(() => {
@@ -17,5 +17,5 @@ export function useRequireAuth() {
     }
   }, [user, loading, router]);
 
-  return { user, loading, username, logout };
+  return { user, loading, username, householdId, logout, refreshUser };
 }
