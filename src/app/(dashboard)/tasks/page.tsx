@@ -242,7 +242,7 @@ export default function TasksPage() {
                 </div>
                 <div className="space-y-2">
                   <label className="text-sm font-medium">Asignar a</label>
-                  <Select value={newTask.assignedTo} onValueChange={(v) => setNewTask({...newTask, assignedTo: v})}>
+                  <Select value={newTask.assignedTo} onValueChange={(v) => setNewTask({...newTask, assignedTo: v || "unassigned"})}>
                     <SelectTrigger>
                       <SelectValue placeholder="Seleccionar..." />
                     </SelectTrigger>
