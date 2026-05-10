@@ -261,7 +261,7 @@ export default function RewardsPage() {
             <form onSubmit={handleCreateItem} className="space-y-4 pt-4">
               <div className="space-y-2">
                 <label className="text-sm font-medium">Tipo</label>
-                <Select value={newItem.type} onValueChange={(v: RewardType) => setNewItem({...newItem, type: v})}>
+                <Select value={newItem.type} onValueChange={(v) => v && setNewItem({...newItem, type: v as RewardType})}>
                   <SelectTrigger>
                     <SelectValue />
                   </SelectTrigger>
