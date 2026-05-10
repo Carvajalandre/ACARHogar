@@ -25,9 +25,16 @@ export async function createTask(task: Omit<Task, "id" | "createdAt" | "status">
   return docRef.id;
 }
 
-export async function updateTaskStatus(taskId: string, status: TaskStatus) {
+import { updateUserPoints } from "./users";
+
+export async function updateTaskStatus(taskId: string, status: TaskStatus, points?: number, userId?: string) {
   const taskRef = doc(db, "tasks", taskId);
   await updateDoc(taskRef, { status });
+
+  if (points && userId) {
+    const pointsDiff = status === "completed" ? points : -points;
+    await updateUserPoints(userId, pointsDiff);
+  }
 }
 
 export async function updateTask(taskId: string, updates: Partial<Omit<Task, "id" | "createdAt" | "householdId" | "createdBy">>) {
