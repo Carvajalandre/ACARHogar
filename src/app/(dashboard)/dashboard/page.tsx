@@ -48,10 +48,11 @@ export default function DashboardPage() {
             const tasksSnap = await getDocs(tasksQuery);
             setPendingTasks(tasksSnap.size);
             
-            // Recompensas disponibles
+            // Recompensas disponibles (solo tipo 'reward')
             const rewardsQuery = query(
               collection(db, "rewards"),
-              where("householdId", "==", householdId)
+              where("householdId", "==", householdId),
+              where("type", "==", "reward")
             );
             const rewardsSnap = await getDocs(rewardsQuery);
             setAvailableRewards(rewardsSnap.size);

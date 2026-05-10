@@ -247,11 +247,13 @@ export default function RewardsPage() {
         </div>
 
         <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-          <DialogTrigger asChild>
-            <Button className="gap-2 shrink-0">
-              <Plus className="h-4 w-4" /> Nuevo Ítem
-            </Button>
-          </DialogTrigger>
+          <DialogTrigger 
+            render={
+              <Button className="gap-2 shrink-0">
+                <Plus className="h-4 w-4" /> Nuevo Ítem
+              </Button>
+            }
+          />
           <DialogContent className="sm:max-w-[425px]">
             <DialogHeader>
               <DialogTitle>Crear Recompensa o Castigo</DialogTitle>
