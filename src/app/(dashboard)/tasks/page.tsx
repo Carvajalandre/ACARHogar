@@ -87,7 +87,8 @@ export default function TasksPage() {
   const toggleTaskStatus = async (task: Task) => {
     if (!task.id) return;
     const newStatus = task.status === "todo" ? "completed" : "todo";
-    await updateTaskStatus(task.id, newStatus);
+    // We award points to the user who marks it as completed (or removes it)
+    await updateTaskStatus(task.id, newStatus, task.points, user?.uid);
   };
 
   const handleDeleteTask = async (taskId: string) => {
