@@ -1,4 +1,4 @@
-import { collection, addDoc, doc, getDocs, query, where, Timestamp, deleteDoc } from "firebase/firestore";
+import { collection, addDoc, doc, getDocs, query, where, Timestamp, deleteDoc, updateDoc } from "firebase/firestore";
 import { db } from "./client";
 
 export type RewardType = "reward" | "punishment";
@@ -26,6 +26,11 @@ export async function createReward(reward: Omit<Reward, "id" | "createdAt">) {
 export async function deleteReward(rewardId: string) {
   const rewardRef = doc(db, "rewards", rewardId);
   await deleteDoc(rewardRef);
+}
+
+export async function updateReward(rewardId: string, updates: Partial<Omit<Reward, "id" | "createdAt" | "householdId" | "createdBy">>) {
+  const rewardRef = doc(db, "rewards", rewardId);
+  await updateDoc(rewardRef, updates);
 }
 
 export async function getHouseholdRewards(householdId: string) {
