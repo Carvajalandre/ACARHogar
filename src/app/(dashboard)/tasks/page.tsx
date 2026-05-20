@@ -4,10 +4,10 @@ import { useRequireAuth } from "@/lib/hooks/use-require-auth";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { ClipboardList, Plus, Trash2, Edit2, CheckCircle2, Circle } from "lucide-react";
+import { ClipboardList, Plus, Trash2, Edit2, CheckCircle2, Circle, Calendar as CalendarIcon } from "lucide-react";
 import { collection, query, where, onSnapshot } from "firebase/firestore";
 import { db } from "@/lib/firebase/client";
-import { Task, createTask, updateTaskStatus, deleteTask } from "@/lib/firebase/tasks";
+import { Task, TaskTemplate, createTask, updateTask, updateTaskStatus, deleteTask, createTaskTemplate } from "@/lib/firebase/tasks";
 import { getHomeMembers } from "@/lib/firebase/homes";
 import {
   Dialog,
@@ -32,13 +32,19 @@ export default function TasksPage() {
   const [members, setMembers] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   
+  const [templates, setTemplates] = useState<TaskTemplate[]>([]);
+  
   // Create task form state
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
   const [newTask, setNewTask] = useState({
     title: "",
     description: "",
     points: 10,
-    assignedTo: "unassigned"
+    assignedTo: "unassigned",
+    dueDate: "",
+    saveAsTemplate: false,
+    templateId: "none"
   });
 
   useEffect(() => {
@@ -64,24 +70,74 @@ export default function TasksPage() {
       setLoading(false);
     });
 
-    return () => unsubscribe();
+    // Listen to templates
+    const templatesQuery = query(collection(db, "taskTemplates"), where("householdId", "==", householdId));
+    const unsubscribeTemplates = onSnapshot(templatesQuery, (snap) => {
+      const fetchedTemplates = snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as TaskTemplate));
+      setTemplates(fetchedTemplates);
+    });
+
+    return () => {
+      unsubscribe();
+      unsubscribeTemplates();
+    };
   }, [householdId]);
 
-  const handleCreateTask = async (e: React.FormEvent) => {
+  const handleTemplateSelect = (templateId: string) => {
+    if (templateId === "none") {
+      setNewTask(prev => ({ ...prev, templateId, title: "", description: "", points: 10, saveAsTemplate: false }));
+      return;
+    }
+    const template = templates.find(t => t.id === templateId);
+    if (template) {
+      setNewTask(prev => ({
+        ...prev,
+        templateId,
+        title: template.title,
+        description: template.description || "",
+        points: template.points,
+        saveAsTemplate: false
+      }));
+    }
+  };
+
+  const handleSaveTask = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user || !householdId || !newTask.title.trim()) return;
 
-    await createTask({
-      title: newTask.title,
-      description: newTask.description,
-      points: Number(newTask.points) || 0,
-      assignedTo: newTask.assignedTo === "unassigned" ? null : newTask.assignedTo,
-      createdBy: user.uid,
-      householdId: householdId,
-    });
+    if (editingTaskId) {
+      await updateTask(editingTaskId, {
+        title: newTask.title,
+        description: newTask.description,
+        points: Number(newTask.points) || 0,
+        assignedTo: newTask.assignedTo === "unassigned" ? null : newTask.assignedTo,
+        dueDate: newTask.dueDate || undefined,
+      });
+    } else {
+      await createTask({
+        title: newTask.title,
+        description: newTask.description,
+        points: Number(newTask.points) || 0,
+        assignedTo: newTask.assignedTo === "unassigned" ? null : newTask.assignedTo,
+        dueDate: newTask.dueDate || undefined,
+        createdBy: user.uid,
+        householdId: householdId,
+      });
+
+      if (newTask.saveAsTemplate && newTask.templateId === "none") {
+        await createTaskTemplate({
+          title: newTask.title,
+          description: newTask.description,
+          points: Number(newTask.points) || 0,
+          createdBy: user.uid,
+          householdId: householdId,
+        });
+      }
+    }
 
     setIsDialogOpen(false);
-    setNewTask({ title: "", description: "", points: 10, assignedTo: "unassigned" });
+    setEditingTaskId(null);
+    setNewTask({ title: "", description: "", points: 10, assignedTo: "unassigned", dueDate: "", saveAsTemplate: false, templateId: "none" });
   };
 
   const toggleTaskStatus = async (task: Task) => {
@@ -175,10 +231,36 @@ export default function TasksPage() {
                     <span className="w-1.5 h-1.5 rounded-full bg-primary/50"></span>
                     {getAssigneeName(task.assignedTo)}
                   </span>
+                  {task.dueDate && (
+                    <span className="text-muted-foreground flex items-center gap-1 ml-2">
+                      <CalendarIcon className="h-3 w-3" />
+                      {new Date(task.dueDate + "T00:00:00").toLocaleDateString()}
+                    </span>
+                  )}
                 </div>
               </div>
 
               <div className="flex items-center gap-2">
+                <Button 
+                  variant="ghost" 
+                  size="icon" 
+                  className="h-8 w-8 text-primary hover:text-primary hover:bg-primary/10" 
+                  onClick={() => {
+                    setEditingTaskId(task.id!);
+                    setNewTask({
+                      title: task.title,
+                      description: task.description || "",
+                      points: task.points,
+                      assignedTo: task.assignedTo || "unassigned",
+                      dueDate: task.dueDate || "",
+                      saveAsTemplate: false,
+                      templateId: "none"
+                    });
+                    setIsDialogOpen(true);
+                  }}
+                >
+                  <Edit2 className="h-4 w-4" />
+                </Button>
                 <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10" onClick={() => handleDeleteTask(task.id!)}>
                   <Trash2 className="h-4 w-4" />
                 </Button>
@@ -200,7 +282,13 @@ export default function TasksPage() {
           </p>
         </div>
 
-        <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+        <Dialog open={isDialogOpen} onOpenChange={(open) => {
+          setIsDialogOpen(open);
+          if (!open) {
+            setEditingTaskId(null);
+            setNewTask({ title: "", description: "", points: 10, assignedTo: "unassigned", dueDate: "", saveAsTemplate: false, templateId: "none" });
+          }
+        }}>
           <DialogTrigger 
             render={
               <Button className="gap-2 shrink-0">
@@ -210,9 +298,28 @@ export default function TasksPage() {
           />
           <DialogContent className="sm:max-w-[425px]">
             <DialogHeader>
-              <DialogTitle>Crear Nueva Tarea</DialogTitle>
+              <DialogTitle>{editingTaskId ? "Editar Tarea" : "Crear Nueva Tarea"}</DialogTitle>
             </DialogHeader>
-            <form onSubmit={handleCreateTask} className="space-y-4 pt-4">
+            <form onSubmit={handleSaveTask} className="space-y-4 pt-4">
+              {templates.length > 0 && !editingTaskId && (
+                <div className="space-y-2 mb-4 p-3 bg-muted/50 rounded-lg border border-border">
+                  <label className="text-sm font-medium">Usar una plantilla (Opcional)</label>
+                  <Select value={newTask.templateId} onValueChange={(v) => handleTemplateSelect(v || "none")}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Seleccionar plantilla..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">Sin plantilla (Crear desde 0)</SelectItem>
+                      {templates.map(t => (
+                        <SelectItem key={t.id} value={t.id!}>
+                          {t.title} ({t.points} pts)
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+
               <div className="space-y-2">
                 <label className="text-sm font-medium">Título</label>
                 <Input 
@@ -220,6 +327,7 @@ export default function TasksPage() {
                   placeholder="Ej. Lavar los platos" 
                   value={newTask.title}
                   onChange={e => setNewTask({...newTask, title: e.target.value})}
+                  disabled={newTask.templateId !== "none"}
                 />
               </div>
               <div className="space-y-2">
@@ -239,6 +347,7 @@ export default function TasksPage() {
                     required 
                     value={newTask.points}
                     onChange={e => setNewTask({...newTask, points: parseInt(e.target.value) || 0})}
+                    disabled={newTask.templateId !== "none"}
                   />
                 </div>
                 <div className="space-y-2">
@@ -258,6 +367,31 @@ export default function TasksPage() {
                   </Select>
                 </div>
               </div>
+
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Fecha en calendario (Opcional)</label>
+                <Input 
+                  type="date"
+                  value={newTask.dueDate}
+                  onChange={e => setNewTask({...newTask, dueDate: e.target.value})}
+                />
+              </div>
+              
+              {newTask.templateId === "none" && !editingTaskId && (
+                <div className="flex items-center space-x-2 mt-2">
+                  <input 
+                    type="checkbox" 
+                    id="saveAsTemplate"
+                    className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
+                    checked={newTask.saveAsTemplate}
+                    onChange={e => setNewTask({...newTask, saveAsTemplate: e.target.checked})}
+                  />
+                  <label htmlFor="saveAsTemplate" className="text-sm font-medium cursor-pointer">
+                    Guardar tarea como plantilla
+                  </label>
+                </div>
+              )}
+
               <Button type="submit" className="w-full mt-4">Guardar Tarea</Button>
             </form>
           </DialogContent>

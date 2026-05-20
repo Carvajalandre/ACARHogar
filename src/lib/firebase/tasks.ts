@@ -13,6 +13,16 @@ export interface Task {
   householdId: string;
   status: TaskStatus;
   createdAt: any;
+  dueDate?: string;
+}
+
+export interface TaskTemplate {
+  id?: string;
+  title: string;
+  description: string;
+  points: number;
+  householdId: string;
+  createdBy: string;
 }
 
 export async function createTask(task: Omit<Task, "id" | "createdAt" | "status">) {
@@ -51,4 +61,16 @@ export async function getHouseholdTasks(householdId: string) {
   const q = query(collection(db, "tasks"), where("householdId", "==", householdId));
   const snap = await getDocs(q);
   return snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Task));
+}
+
+export async function getTaskTemplates(householdId: string) {
+  const q = query(collection(db, "taskTemplates"), where("householdId", "==", householdId));
+  const snap = await getDocs(q);
+  return snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as TaskTemplate));
+}
+
+export async function createTaskTemplate(template: Omit<TaskTemplate, "id">) {
+  const templatesRef = collection(db, "taskTemplates");
+  const docRef = await addDoc(templatesRef, template);
+  return docRef.id;
 }

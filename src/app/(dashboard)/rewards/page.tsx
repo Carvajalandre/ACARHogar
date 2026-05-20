@@ -3,10 +3,10 @@ import { useEffect, useState } from "react";
 import { useRequireAuth } from "@/lib/hooks/use-require-auth";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Gift, Plus, Trophy, Flame, Trash2 } from "lucide-react";
+import { Gift, Plus, Trophy, Flame, Trash2, Edit2 } from "lucide-react";
 import { collection, query, where, onSnapshot, doc } from "firebase/firestore";
 import { db } from "@/lib/firebase/client";
-import { Reward, RewardType, createReward, deleteReward } from "@/lib/firebase/rewards";
+import { Reward, RewardType, createReward, deleteReward, updateReward } from "@/lib/firebase/rewards";
 import { updateUserPoints } from "@/lib/firebase/users";
 import {
   Dialog,
@@ -33,6 +33,7 @@ export default function RewardsPage() {
   const [loading, setLoading] = useState(true);
 
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [editingItemId, setEditingItemId] = useState<string | null>(null);
   const [newItem, setNewItem] = useState<{ title: string; description?: string; cost: number; type: RewardType }>({
     title: "",
     description: "",
@@ -72,20 +73,30 @@ export default function RewardsPage() {
     };
   }, [user, householdId]);
 
-  const handleCreateItem = async (e: React.FormEvent) => {
+  const handleSaveItem = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user || !householdId || !newItem.title.trim()) return;
 
-    await createReward({
-      title: newItem.title,
-      description: newItem.description?.trim() || undefined,
-      cost: Number(newItem.cost) || 0,
-      type: newItem.type,
-      householdId: householdId,
-      createdBy: user.uid,
-    });
+    if (editingItemId) {
+      await updateReward(editingItemId, {
+        title: newItem.title,
+        description: newItem.description?.trim() || undefined,
+        cost: Number(newItem.cost) || 0,
+        type: newItem.type,
+      });
+    } else {
+      await createReward({
+        title: newItem.title,
+        description: newItem.description?.trim() || undefined,
+        cost: Number(newItem.cost) || 0,
+        type: newItem.type,
+        householdId: householdId,
+        createdBy: user.uid,
+      });
+    }
 
     setIsDialogOpen(false);
+    setEditingItemId(null);
     setNewItem({ title: "", description: "", cost: 50, type: "reward" });
   };
 
@@ -223,6 +234,18 @@ export default function RewardsPage() {
                 <Button 
                   variant="ghost" 
                   size="icon" 
+                  className="h-8 w-8 text-primary hover:text-primary hover:bg-primary/10" 
+                  onClick={() => {
+                    setEditingItemId(item.id!);
+                    setNewItem({ title: item.title, description: item.description || "", cost: item.cost, type: item.type });
+                    setIsDialogOpen(true);
+                  }}
+                >
+                  <Edit2 className="h-4 w-4" />
+                </Button>
+                <Button 
+                  variant="ghost" 
+                  size="icon" 
                   className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10" 
                   onClick={() => handleDelete(item.id!)}
                 >
@@ -246,7 +269,13 @@ export default function RewardsPage() {
           </p>
         </div>
 
-        <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+        <Dialog open={isDialogOpen} onOpenChange={(open) => {
+          setIsDialogOpen(open);
+          if (!open) {
+            setEditingItemId(null);
+            setNewItem({ title: "", description: "", cost: 50, type: "reward" });
+          }
+        }}>
           <DialogTrigger 
             render={
               <Button className="gap-2 shrink-0">
@@ -256,9 +285,9 @@ export default function RewardsPage() {
           />
           <DialogContent className="sm:max-w-[425px]">
             <DialogHeader>
-              <DialogTitle>Crear Recompensa o Castigo</DialogTitle>
+              <DialogTitle>{editingItemId ? "Editar Ítem" : "Crear Recompensa o Castigo"}</DialogTitle>
             </DialogHeader>
-            <form onSubmit={handleCreateItem} className="space-y-4 pt-4">
+            <form onSubmit={handleSaveItem} className="space-y-4 pt-4">
               <div className="space-y-2">
                 <label className="text-sm font-medium">Tipo</label>
                 <Select value={newItem.type} onValueChange={(v) => v && setNewItem({...newItem, type: v as RewardType})}>
