@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Gift, Plus, Trophy, Flame, Trash2, Edit2 } from "lucide-react";
 import { collection, query, where, onSnapshot, doc } from "firebase/firestore";
 import { db } from "@/lib/firebase/client";
-import { Reward, RewardType, createReward, deleteReward, updateReward } from "@/lib/firebase/rewards";
+import { Reward, RewardType, Redemption, createReward, deleteReward, updateReward, createRedemption } from "@/lib/firebase/rewards";
 import { updateUserPoints } from "@/lib/firebase/users";
 import {
   Dialog,
@@ -27,8 +27,9 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import Link from "next/link";
 
 export default function RewardsPage() {
-  const { user, householdId } = useRequireAuth();
+  const { user, householdId, username } = useRequireAuth();
   const [rewards, setRewards] = useState<Reward[]>([]);
+  const [redemptions, setRedemptions] = useState<Redemption[]>([]);
   const [userPoints, setUserPoints] = useState<number>(0);
   const [loading, setLoading] = useState(true);
 
@@ -67,9 +68,22 @@ export default function RewardsPage() {
       setLoading(false);
     });
 
+    // Listen to household redemptions
+    const redemptionsQuery = query(collection(db, "redemptions"), where("householdId", "==", householdId));
+    const redemptionsUnsub = onSnapshot(redemptionsQuery, (snap) => {
+      const fetched = snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Redemption));
+      fetched.sort((a, b) => {
+        const dateA = a.createdAt?.toDate?.() || new Date(0);
+        const dateB = b.createdAt?.toDate?.() || new Date(0);
+        return dateB.getTime() - dateA.getTime();
+      });
+      setRedemptions(fetched);
+    });
+
     return () => {
       userUnsub();
       rewardsUnsub();
+      redemptionsUnsub();
     };
   }, [user, householdId]);
 
@@ -107,7 +121,7 @@ export default function RewardsPage() {
   };
 
   const handleRedeem = async (reward: Reward) => {
-    if (!user) return;
+    if (!user || !householdId) return;
     if (reward.type === "reward") {
       if (userPoints < reward.cost) {
         alert("No tienes suficientes puntos para canjear esta recompensa.");
@@ -115,11 +129,29 @@ export default function RewardsPage() {
       }
       if (confirm(`¿Quieres canjear "${reward.title}" por ${reward.cost} puntos?`)) {
         await updateUserPoints(user.uid, -reward.cost);
+        await createRedemption({
+          rewardId: reward.id!,
+          rewardTitle: reward.title,
+          rewardType: reward.type,
+          cost: reward.cost,
+          userId: user.uid,
+          userName: username || user.displayName || user.email || "Miembro del Hogar",
+          householdId: householdId,
+        });
         alert("¡Recompensa canjeada con éxito!");
       }
     } else {
       if (confirm(`¿Quieres aplicar el castigo "${reward.title}" (Penalización: ${reward.cost} puntos)?`)) {
         await updateUserPoints(user.uid, -reward.cost);
+        await createRedemption({
+          rewardId: reward.id!,
+          rewardTitle: reward.title,
+          rewardType: reward.type,
+          cost: reward.cost,
+          userId: user.uid,
+          userName: username || user.displayName || user.email || "Miembro del Hogar",
+          householdId: householdId,
+        });
         alert("¡Castigo aplicado!");
       }
     }
@@ -259,6 +291,78 @@ export default function RewardsPage() {
     );
   };
 
+  const renderRedemptionsList = (items: Redemption[]) => {
+    if (items.length === 0) {
+      return (
+        <Card className="border-dashed border-border bg-card/50">
+          <CardContent className="flex flex-col items-center justify-center py-16">
+            <div className="rounded-2xl p-5 mb-5 bg-muted">
+              <Gift className="h-10 w-10 text-muted-foreground" />
+            </div>
+            <h2 className="text-lg font-semibold mb-2">Sin canjes aún</h2>
+            <p className="max-w-sm text-center text-sm text-muted-foreground">
+              Aquí verás el historial de recompensas canjeadas y castigos aplicados por los miembros del hogar.
+            </p>
+          </CardContent>
+        </Card>
+      );
+    }
+
+    const formatEventDate = (timestamp: any) => {
+      if (!timestamp) return "";
+      const date = timestamp.toDate?.() || new Date(timestamp);
+      return date.toLocaleDateString("es-ES", {
+        day: "numeric",
+        month: "short",
+        hour: "2-digit",
+        minute: "2-digit"
+      });
+    };
+
+    return (
+      <div className="space-y-3">
+        {items.map(item => (
+          <Card key={item.id} className="transition-all hover:bg-muted/50">
+            <CardContent className="p-4 flex items-center justify-between gap-4">
+              <div className="flex items-center gap-4 min-w-0">
+                <div className={`flex-shrink-0 p-3 rounded-xl ${item.rewardType === 'reward' ? 'bg-amber-500/10' : 'bg-destructive/10'}`}>
+                  {item.rewardType === 'reward' ? (
+                    <Gift className="h-5 w-5 text-amber-500" />
+                  ) : (
+                    <Flame className="h-5 w-5 text-destructive" />
+                  )}
+                </div>
+                
+                <div className="min-w-0">
+                  <h3 className="font-semibold text-sm sm:text-base truncate">
+                    {item.rewardTitle}
+                  </h3>
+                  <p className="text-xs sm:text-sm text-muted-foreground mt-1">
+                    {item.rewardType === 'reward' ? 'Canjeado por' : 'Aplicado a'}{' '}
+                    <span className="font-medium text-foreground">{item.userName}</span>
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex flex-col items-end gap-1 flex-shrink-0">
+                <span className={`font-semibold text-sm px-2 py-0.5 rounded-full ${
+                  item.rewardType === 'reward' 
+                    ? 'text-amber-500 bg-amber-500/10' 
+                    : 'text-destructive bg-destructive/10'
+                }`}>
+                  -{item.cost} pts
+                </span>
+                <span className="text-xs text-muted-foreground">
+                  {formatEventDate(item.createdAt)}
+                </span>
+              </div>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+    );
+  };
+
   return (
     <div className="p-6 lg:p-8 max-w-5xl mx-auto">
       <div className="mb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -356,12 +460,16 @@ export default function RewardsPage() {
         <TabsList className="mb-4">
           <TabsTrigger value="rewards">Recompensas ({rewardList.length})</TabsTrigger>
           <TabsTrigger value="punishments">Castigos ({punishmentList.length})</TabsTrigger>
+          <TabsTrigger value="redemptions">Canjeados ({redemptions.length})</TabsTrigger>
         </TabsList>
         <TabsContent value="rewards" className="mt-0">
           {renderList(rewardList, "reward")}
         </TabsContent>
         <TabsContent value="punishments" className="mt-0">
           {renderList(punishmentList, "punishment")}
+        </TabsContent>
+        <TabsContent value="redemptions" className="mt-0">
+          {renderRedemptionsList(redemptions)}
         </TabsContent>
       </Tabs>
     </div>

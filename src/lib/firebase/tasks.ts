@@ -27,11 +27,23 @@ export interface TaskTemplate {
 
 export async function createTask(task: Omit<Task, "id" | "createdAt" | "status">) {
   const tasksRef = collection(db, "tasks");
-  const docRef = await addDoc(tasksRef, {
-    ...task,
+  
+  const cleanData: any = {
+    title: task.title,
+    description: task.description || "",
+    points: task.points,
+    assignedTo: task.assignedTo,
+    createdBy: task.createdBy,
+    householdId: task.householdId,
     status: "todo",
     createdAt: Timestamp.now(),
-  });
+  };
+
+  if (task.dueDate !== undefined) {
+    cleanData.dueDate = task.dueDate;
+  }
+
+  const docRef = await addDoc(tasksRef, cleanData);
   return docRef.id;
 }
 
@@ -49,7 +61,16 @@ export async function updateTaskStatus(taskId: string, status: TaskStatus, point
 
 export async function updateTask(taskId: string, updates: Partial<Omit<Task, "id" | "createdAt" | "householdId" | "createdBy">>) {
   const taskRef = doc(db, "tasks", taskId);
-  await updateDoc(taskRef, updates);
+  
+  const cleanUpdates: any = {};
+  if (updates.title !== undefined) cleanUpdates.title = updates.title;
+  if (updates.description !== undefined) cleanUpdates.description = updates.description;
+  if (updates.points !== undefined) cleanUpdates.points = updates.points;
+  if (updates.assignedTo !== undefined) cleanUpdates.assignedTo = updates.assignedTo;
+  if (updates.status !== undefined) cleanUpdates.status = updates.status;
+  if (updates.dueDate !== undefined) cleanUpdates.dueDate = updates.dueDate;
+
+  await updateDoc(taskRef, cleanUpdates);
 }
 
 export async function deleteTask(taskId: string) {
@@ -71,6 +92,15 @@ export async function getTaskTemplates(householdId: string) {
 
 export async function createTaskTemplate(template: Omit<TaskTemplate, "id">) {
   const templatesRef = collection(db, "taskTemplates");
-  const docRef = await addDoc(templatesRef, template);
+  
+  const cleanData: any = {
+    title: template.title,
+    description: template.description || "",
+    points: template.points,
+    householdId: template.householdId,
+    createdBy: template.createdBy,
+  };
+
+  const docRef = await addDoc(templatesRef, cleanData);
   return docRef.id;
 }
