@@ -16,13 +16,6 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import Link from "next/link";
 
@@ -91,69 +84,84 @@ export default function RewardsPage() {
     e.preventDefault();
     if (!user || !householdId || !newItem.title.trim()) return;
 
-    if (editingItemId) {
-      await updateReward(editingItemId, {
-        title: newItem.title,
-        description: newItem.description?.trim() || undefined,
-        cost: Number(newItem.cost) || 0,
-        type: newItem.type,
-      });
-    } else {
-      await createReward({
-        title: newItem.title,
-        description: newItem.description?.trim() || undefined,
-        cost: Number(newItem.cost) || 0,
-        type: newItem.type,
-        householdId: householdId,
-        createdBy: user.uid,
-      });
-    }
+    try {
+      if (editingItemId) {
+        await updateReward(editingItemId, {
+          title: newItem.title,
+          description: newItem.description?.trim() || undefined,
+          cost: Number(newItem.cost) || 0,
+          type: newItem.type,
+        });
+      } else {
+        await createReward({
+          title: newItem.title,
+          description: newItem.description?.trim() || undefined,
+          cost: Number(newItem.cost) || 0,
+          type: newItem.type,
+          householdId: householdId,
+          createdBy: user.uid,
+        });
+      }
 
-    setIsDialogOpen(false);
-    setEditingItemId(null);
-    setNewItem({ title: "", description: "", cost: 50, type: "reward" });
+      setIsDialogOpen(false);
+      setEditingItemId(null);
+      setNewItem({ title: "", description: "", cost: 50, type: "reward" });
+    } catch (error: any) {
+      console.error("Error al guardar el ítem:", error);
+      alert("Error al guardar el ítem: " + (error.message || error));
+    }
   };
 
   const handleDelete = async (rewardId: string) => {
     if (confirm("¿Estás seguro de eliminar este ítem?")) {
-      await deleteReward(rewardId);
+      try {
+        await deleteReward(rewardId);
+      } catch (error: any) {
+        console.error("Error al eliminar el ítem:", error);
+        alert("Error al eliminar: " + (error.message || error));
+      }
     }
   };
 
   const handleRedeem = async (reward: Reward) => {
     if (!user || !householdId) return;
-    if (reward.type === "reward") {
-      if (userPoints < reward.cost) {
-        alert("No tienes suficientes puntos para canjear esta recompensa.");
-        return;
+    try {
+      if (reward.type === "reward") {
+        if (userPoints < reward.cost) {
+          alert("No tienes suficientes puntos para canjear esta recompensa.");
+          return;
+        }
+        if (confirm(`¿Quieres canjear "${reward.title}" por ${reward.cost} puntos?`)) {
+          await updateUserPoints(user.uid, -reward.cost);
+          await createRedemption({
+            rewardId: reward.id!,
+            rewardTitle: reward.title,
+            rewardType: reward.type,
+            cost: reward.cost,
+            userId: user.uid,
+            userName: username || user.displayName || user.email || "Miembro del Hogar",
+            householdId: householdId,
+          });
+          alert("¡Recompensa canjeada con éxito!");
+        }
+      } else {
+        if (confirm(`¿Quieres aplicar el castigo "${reward.title}" (Penalización: ${reward.cost} puntos)?`)) {
+          await updateUserPoints(user.uid, -reward.cost);
+          await createRedemption({
+            rewardId: reward.id!,
+            rewardTitle: reward.title,
+            rewardType: reward.type,
+            cost: reward.cost,
+            userId: user.uid,
+            userName: username || user.displayName || user.email || "Miembro del Hogar",
+            householdId: householdId,
+          });
+          alert("¡Castigo aplicado!");
+        }
       }
-      if (confirm(`¿Quieres canjear "${reward.title}" por ${reward.cost} puntos?`)) {
-        await updateUserPoints(user.uid, -reward.cost);
-        await createRedemption({
-          rewardId: reward.id!,
-          rewardTitle: reward.title,
-          rewardType: reward.type,
-          cost: reward.cost,
-          userId: user.uid,
-          userName: username || user.displayName || user.email || "Miembro del Hogar",
-          householdId: householdId,
-        });
-        alert("¡Recompensa canjeada con éxito!");
-      }
-    } else {
-      if (confirm(`¿Quieres aplicar el castigo "${reward.title}" (Penalización: ${reward.cost} puntos)?`)) {
-        await updateUserPoints(user.uid, -reward.cost);
-        await createRedemption({
-          rewardId: reward.id!,
-          rewardTitle: reward.title,
-          rewardType: reward.type,
-          cost: reward.cost,
-          userId: user.uid,
-          userName: username || user.displayName || user.email || "Miembro del Hogar",
-          householdId: householdId,
-        });
-        alert("¡Castigo aplicado!");
-      }
+    } catch (error: any) {
+      console.error("Error al realizar la acción:", error);
+      alert("Error al procesar: " + (error.message || error));
     }
   };
 
@@ -394,15 +402,14 @@ export default function RewardsPage() {
             <form onSubmit={handleSaveItem} className="space-y-4 pt-4">
               <div className="space-y-2">
                 <label className="text-sm font-medium">Tipo</label>
-                <Select value={newItem.type} onValueChange={(v) => v && setNewItem({...newItem, type: v as RewardType})}>
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="reward">Recompensa (Premio)</SelectItem>
-                    <SelectItem value="punishment">Castigo (Penitencia)</SelectItem>
-                  </SelectContent>
-                </Select>
+                <select
+                  value={newItem.type}
+                  onChange={(e) => setNewItem({...newItem, type: e.target.value as RewardType})}
+                  className="h-8 w-full min-w-0 rounded-lg border border-input bg-background dark:bg-zinc-900 px-2.5 py-1 text-sm transition-colors outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 text-foreground cursor-pointer"
+                >
+                  <option value="reward" className="bg-background text-foreground dark:bg-zinc-900">Recompensa (Premio)</option>
+                  <option value="punishment" className="bg-background text-foreground dark:bg-zinc-900">Castigo (Penitencia)</option>
+                </select>
               </div>
 
               <div className="space-y-2">
