@@ -20,8 +20,8 @@ export default function RootLayout({
   return (
     <html lang="es" className="dark">
       <body className={`${inter.className} bg-background text-foreground`}>
-        <ThemeLoader />
         <AuthProvider>
+          <ThemeLoader />
           <TooltipProvider>{children}</TooltipProvider>
         </AuthProvider>
       </body>
