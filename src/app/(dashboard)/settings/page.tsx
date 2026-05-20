@@ -3,8 +3,8 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/lib/firebase/auth-context";
 import { applyTheme, ThemeName, themeMeta } from "@/lib/themes";
-import { useState, useEffect } from "react";
-import { doc, setDoc } from "firebase/firestore";
+import { useState, useEffect, useRef } from "react";
+import { doc, setDoc, getDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase/client";
 import { Check, Palette, LogOut } from "lucide-react";
 
@@ -12,38 +12,72 @@ const themeNames = Object.keys(themeMeta) as ThemeName[];
 
 export default function SettingsPage() {
   const { user, logout } = useAuth();
-  const [currentTheme, setCurrentTheme] = useState<ThemeName>("noir-red");
+  const [savedTheme, setSavedTheme] = useState<ThemeName>("noir-red");
+  const [selectedTheme, setSelectedTheme] = useState<ThemeName>("noir-red");
+  const [saving, setSaving] = useState(false);
+  const savedThemeRef = useRef<ThemeName>("noir-red");
 
+  // Keep ref in sync to revert preview on unmount
   useEffect(() => {
-    const stored = localStorage.getItem("theme") as ThemeName | null;
+    savedThemeRef.current = savedTheme;
+  }, [savedTheme]);
+
+  // Load saved theme on load
+  useEffect(() => {
+    if (!user) return;
+
+    // 1. Check local storage
+    const stored = localStorage.getItem(`theme_${user.uid}`) as ThemeName | null;
     if (stored && themeMeta[stored]) {
-      setCurrentTheme(stored);
+      setSavedTheme(stored);
+      setSelectedTheme(stored);
     }
 
-    const handleThemeChange = (e: any) => {
-      if (e.detail && themeMeta[e.detail as ThemeName]) {
-        setCurrentTheme(e.detail);
+    // 2. Fetch from Firestore
+    const fetchTheme = async () => {
+      try {
+        const userDoc = await getDoc(doc(db, "users", user.uid));
+        if (userDoc.exists() && userDoc.data().theme) {
+          const themeName = userDoc.data().theme as ThemeName;
+          setSavedTheme(themeName);
+          setSelectedTheme(themeName);
+          localStorage.setItem(`theme_${user.uid}`, themeName);
+          applyTheme(themeName);
+        }
+      } catch (e) {
+        console.error("Error fetching theme", e);
       }
     };
-    window.addEventListener("theme-changed", handleThemeChange);
-    return () => window.removeEventListener("theme-changed", handleThemeChange);
+    fetchTheme();
+  }, [user]);
+
+  // Cleanup on unmount: revert if they navigated away without saving
+  useEffect(() => {
+    return () => {
+      applyTheme(savedThemeRef.current);
+    };
   }, []);
 
-  const handleThemeChangeClick = async (themeName: ThemeName) => {
+  const handleThemePreview = (themeName: ThemeName) => {
     applyTheme(themeName);
-    setCurrentTheme(themeName);
+    setSelectedTheme(themeName);
+  };
 
-    // Save to Firestore if logged in
-    if (user) {
-      try {
-        await setDoc(
-          doc(db, "users", user.uid),
-          { theme: themeName },
-          { merge: true }
-        );
-      } catch (e) {
-        console.error("Error saving theme", e);
-      }
+  const handleSaveChanges = async () => {
+    if (!user || selectedTheme === savedTheme) return;
+    setSaving(true);
+    try {
+      await setDoc(
+        doc(db, "users", user.uid),
+        { theme: selectedTheme },
+        { merge: true }
+      );
+      localStorage.setItem(`theme_${user.uid}`, selectedTheme);
+      setSavedTheme(selectedTheme);
+    } catch (e) {
+      console.error("Error saving theme", e);
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -74,11 +108,11 @@ export default function SettingsPage() {
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
             {themeNames.map((name) => {
               const meta = themeMeta[name];
-              const isActive = currentTheme === name;
+              const isActive = selectedTheme === name;
               return (
                 <button
                   key={name}
-                  onClick={() => handleThemeChangeClick(name)}
+                  onClick={() => handleThemePreview(name)}
                   className={`
                     relative flex flex-col items-center gap-2 rounded-xl border-2 p-4
                     transition-all duration-200
@@ -103,6 +137,15 @@ export default function SettingsPage() {
                 </button>
               );
             })}
+          </div>
+
+          <div className="mt-6 flex justify-end">
+            <Button 
+              onClick={handleSaveChanges} 
+              disabled={selectedTheme === savedTheme || saving}
+            >
+              {saving ? "Guardando..." : "Guardar cambios"}
+            </Button>
           </div>
         </CardContent>
       </Card>
